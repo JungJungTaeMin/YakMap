@@ -7,10 +7,13 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 
 import { signInWithEmail, validateEmail } from "../../src/features/auth/authStore";
+import { useGoogleAuth } from "../../src/features/auth/googleAuth";
+import { getResponsiveLayout } from "../../src/styles/responsive";
 
 const COLORS = {
   background: "#f8f6f2",
@@ -24,12 +27,16 @@ const COLORS = {
 };
 
 export default function LoginScreen() {
+  const { width } = useWindowDimensions();
+  const layout = getResponsiveLayout(width);
+  const { signInWithGoogle } = useGoogleAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [securePassword, setSecurePassword] = useState(true);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const canSubmit = validateEmail(email) && password.length > 0 && !isSubmitting;
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  const canSubmit = validateEmail(email) && password.length > 0 && !isSubmitting && !isGoogleSubmitting;
 
   const handleLogin = async () => {
     if (!canSubmit) {
@@ -50,14 +57,30 @@ export default function LoginScreen() {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    setError("");
+    setIsGoogleSubmitting(true);
+
+    try {
+      const signedIn = await signInWithGoogle();
+      if (signedIn) {
+        router.replace("/home");
+      }
+    } catch (googleError) {
+      setError(googleError instanceof Error ? googleError.message : "Google 로그인에 실패했습니다.");
+    } finally {
+      setIsGoogleSubmitting(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.hero}>
+      <View style={[styles.hero, layout.authHero]}>
         <Text style={styles.logo}>약-맵</Text>
         <Text style={styles.tagline}>스마트한 복약 관리의 시작</Text>
       </View>
 
-      <View style={styles.card}>
+      <View style={[styles.card, layout.authCard]}>
         <Text style={styles.title}>로그인</Text>
 
         <Text style={styles.label}>이메일</Text>
@@ -121,9 +144,15 @@ export default function LoginScreen() {
           <Text style={styles.kakaoText}>카카오로 계속하기</Text>
         </Pressable>
 
-        <Pressable style={styles.googleButton}>
+        <Pressable
+          disabled={isSubmitting || isGoogleSubmitting}
+          onPress={handleGoogleLogin}
+          style={[styles.googleButton, isGoogleSubmitting ? styles.googleButtonDisabled : null]}
+        >
           <Text style={styles.googleMark}>G</Text>
-          <Text style={styles.googleText}>Google로 계속하기</Text>
+          <Text style={styles.googleText}>
+            {isGoogleSubmitting ? "Google 로그인 중" : "Google로 계속하기"}
+          </Text>
         </Pressable>
 
         <View style={styles.signupRow}>
@@ -301,6 +330,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 18,
     backgroundColor: COLORS.white,
+  },
+  googleButtonDisabled: {
+    opacity: 0.65,
   },
   googleMark: {
     color: "#4285f4",

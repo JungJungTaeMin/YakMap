@@ -1,5 +1,8 @@
 import { Tabs } from "expo-router";
 import { Home, MapPin, Pill, User } from "lucide-react-native";
+import { useWindowDimensions } from "react-native";
+
+import { getResponsiveLayout } from "../../src/styles/responsive";
 
 const COLORS = {
   active: "#ff8178",
@@ -9,6 +12,9 @@ const COLORS = {
 };
 
 export default function TabsLayout() {
+  const { width } = useWindowDimensions();
+  const layout = getResponsiveLayout(width);
+
   return (
     <Tabs
       screenOptions={{
@@ -21,9 +27,7 @@ export default function TabsLayout() {
           marginTop: 3,
         },
         tabBarStyle: {
-          height: 84,
-          paddingTop: 10,
-          paddingBottom: 12,
+          ...layout.tabBar,
           borderTopWidth: 1,
           borderTopColor: COLORS.border,
           backgroundColor: COLORS.white,

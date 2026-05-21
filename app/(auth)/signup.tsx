@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -16,6 +17,8 @@ import {
   validateEmail,
   validatePassword,
 } from "../../src/features/auth/authStore";
+import { useGoogleAuth } from "../../src/features/auth/googleAuth";
+import { getResponsiveLayout } from "../../src/styles/responsive";
 
 const COLORS = {
   background: "#f8f6f2",
@@ -29,6 +32,9 @@ const COLORS = {
 };
 
 export default function SignupScreen() {
+  const { width } = useWindowDimensions();
+  const layout = getResponsiveLayout(width);
+  const { signInWithGoogle } = useGoogleAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,6 +45,7 @@ export default function SignupScreen() {
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
   const canSubmit =
     name.trim().length > 0 &&
@@ -47,7 +54,8 @@ export default function SignupScreen() {
     password === passwordConfirm &&
     serviceAgreed &&
     privacyAgreed &&
-    !isSubmitting;
+    !isSubmitting &&
+    !isGoogleSubmitting;
 
   const handleSignup = async () => {
     if (!canSubmit) {
@@ -68,9 +76,25 @@ export default function SignupScreen() {
     }
   };
 
+  const handleGoogleSignup = async () => {
+    setError("");
+    setIsGoogleSubmitting(true);
+
+    try {
+      const signedIn = await signInWithGoogle();
+      if (signedIn) {
+        router.replace("/home");
+      }
+    } catch (googleError) {
+      setError(googleError instanceof Error ? googleError.message : "Google 가입에 실패했습니다.");
+    } finally {
+      setIsGoogleSubmitting(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+      <View style={[styles.header, layout.header]}>
         <Pressable
           accessibilityLabel="뒤로가기"
           onPress={() => router.back()}
@@ -85,7 +109,7 @@ export default function SignupScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, layout.content]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -209,9 +233,15 @@ export default function SignupScreen() {
           <Text style={styles.kakaoText}>카카오로 계속하기</Text>
         </Pressable>
 
-        <Pressable style={styles.googleButton}>
+        <Pressable
+          disabled={isSubmitting || isGoogleSubmitting}
+          onPress={handleGoogleSignup}
+          style={[styles.googleButton, isGoogleSubmitting ? styles.googleButtonDisabled : null]}
+        >
           <Text style={styles.googleMark}>G</Text>
-          <Text style={styles.googleText}>Google로 계속하기</Text>
+          <Text style={styles.googleText}>
+            {isGoogleSubmitting ? "Google 처리 중" : "Google로 계속하기"}
+          </Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -396,6 +426,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 18,
     backgroundColor: COLORS.white,
+  },
+  googleButtonDisabled: {
+    opacity: 0.65,
   },
   googleMark: {
     color: "#4285f4",

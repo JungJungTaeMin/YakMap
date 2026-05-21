@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -16,6 +17,7 @@ import {
   getMedicationSchedule,
   saveMedicationSchedule,
 } from "../../../src/features/medicine/scheduleStore";
+import { getResponsiveLayout } from "../../../src/styles/responsive";
 
 const COLORS = {
   background: "#f8f6f2",
@@ -63,6 +65,8 @@ function isValidDurationText(value: string) {
 }
 
 export default function MedicineScheduleScreen() {
+  const { width } = useWindowDimensions();
+  const layout = getResponsiveLayout(width);
   const params = useLocalSearchParams<{ medicineId?: string; scheduleId?: string }>();
   const scheduleId = Array.isArray(params.scheduleId) ? params.scheduleId[0] : params.scheduleId;
   const medicine = findMedicineById(
@@ -160,7 +164,7 @@ export default function MedicineScheduleScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+      <View style={[styles.header, layout.header]}>
         <Pressable
           accessibilityLabel="뒤로가기"
           onPress={() => router.back()}
@@ -174,7 +178,7 @@ export default function MedicineScheduleScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, layout.content]} showsVerticalScrollIndicator={false}>
         <View style={styles.medicineCard}>
           <View>
             <Text style={styles.medicineName}>{medicine.name}</Text>

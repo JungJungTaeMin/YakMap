@@ -5,8 +5,11 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
+
+import { getResponsiveLayout } from "../../../src/styles/responsive";
 
 const COLORS = {
   background: "#f8f6f2",
@@ -20,9 +23,12 @@ const COLORS = {
 };
 
 export default function AddMedicineScreen() {
+  const { width } = useWindowDimensions();
+  const layout = getResponsiveLayout(width);
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+      <View style={[styles.header, layout.header]}>
         <Pressable
           accessibilityLabel="뒤로가기"
           onPress={() => router.back()}
@@ -36,7 +42,7 @@ export default function AddMedicineScreen() {
         </View>
       </View>
 
-      <View style={styles.content}>
+      <View style={[styles.content, layout.content]}>
         <Link href="/medicine/add/scan" asChild>
           <Pressable style={styles.scanCard}>
             <View style={styles.scanIconBox}>

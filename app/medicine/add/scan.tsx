@@ -8,11 +8,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 
 import { identifyMedicineFromImage } from "../../../src/features/medicine/ocr";
 import { medicineToParams } from "../../../src/features/medicine/medicineCatalog";
+import { getResponsiveLayout } from "../../../src/styles/responsive";
 
 const COLORS = {
   background: "#f8f6f2",
@@ -25,6 +27,8 @@ const COLORS = {
 };
 
 export default function ScanMedicineScreen() {
+  const { width } = useWindowDimensions();
+  const layout = getResponsiveLayout(width);
   const [error, setError] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -86,7 +90,7 @@ export default function ScanMedicineScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+      <View style={[styles.header, layout.header]}>
         <Pressable
           accessibilityLabel="뒤로가기"
           onPress={() => router.back()}
@@ -100,7 +104,7 @@ export default function ScanMedicineScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, layout.content]} showsVerticalScrollIndicator={false}>
         <View style={styles.scanFrame}>
           <View style={[styles.corner, styles.topLeft]} />
           <View style={[styles.corner, styles.topRight]} />

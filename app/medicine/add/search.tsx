@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -15,6 +16,7 @@ import {
   frequentMedicines,
   medicineToParams,
 } from "../../../src/features/medicine/medicineCatalog";
+import { getResponsiveLayout } from "../../../src/styles/responsive";
 
 const COLORS = {
   background: "#f8f6f2",
@@ -28,6 +30,8 @@ const COLORS = {
 };
 
 export default function SearchMedicineScreen() {
+  const { width } = useWindowDimensions();
+  const layout = getResponsiveLayout(width);
   const [query, setQuery] = useState("");
   const filteredMedicines = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -45,7 +49,7 @@ export default function SearchMedicineScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+      <View style={[styles.header, layout.header]}>
         <Pressable
           accessibilityLabel="뒤로가기"
           onPress={() => router.back()}
@@ -59,7 +63,7 @@ export default function SearchMedicineScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, layout.content]} showsVerticalScrollIndicator={false}>
         <View style={styles.searchBox}>
           <Search color={COLORS.muted} size={30} strokeWidth={2.3} />
           <TextInput

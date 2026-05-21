@@ -13,8 +13,11 @@ import {
   Linking,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
+
+import { getResponsiveLayout } from "../../src/styles/responsive";
 
 const COLORS = {
   background: "#f8f6f2",
@@ -61,6 +64,8 @@ const stores = [
 ];
 
 export default function MapScreen() {
+  const { width } = useWindowDimensions();
+  const layout = getResponsiveLayout(width);
   const [selectedFilter, setSelectedFilter] = useState<Filter>("전체");
 
   const visibleStores = useMemo(
@@ -77,7 +82,7 @@ export default function MapScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, layout.content]} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>주변 구매처</Text>
         <Text style={styles.subtitle}>가까운 약국과 편의점을 찾아보세요</Text>
 

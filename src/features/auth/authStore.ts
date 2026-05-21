@@ -15,8 +15,9 @@ export type AuthSession = {
 type StoredUser = {
   email: string;
   name: string;
-  passwordHash: string;
-  passwordSalt: string;
+  passwordHash?: string;
+  passwordSalt?: string;
+  provider?: "email" | "google";
   fcmToken: string | null;
 };
 
@@ -41,8 +42,11 @@ async function readUsers() {
 
   const users = await Promise.all(
     parsedUsers.map(async (user) => {
-      if (user.passwordHash && user.passwordSalt) {
-        return user as StoredUser;
+      if (user.provider === "google" || (user.passwordHash && user.passwordSalt)) {
+        return {
+          ...user,
+          provider: user.provider ?? "email",
+        } as StoredUser;
       }
 
       needsMigration = true;
@@ -54,6 +58,7 @@ async function readUsers() {
         name: user.name,
         passwordHash,
         passwordSalt,
+        provider: "email" as const,
         fcmToken: user.fcmToken ?? null,
       };
     }),
@@ -157,7 +162,7 @@ export async function signUpWithEmail(input: {
   const passwordSalt = await createPasswordSalt();
   const passwordHash = await hashPassword(input.password, passwordSalt);
 
-  users.push({ email, name, passwordHash, passwordSalt, fcmToken });
+  users.push({ email, name, passwordHash, passwordSalt, provider: "email", fcmToken });
   await writeUsers(users);
   await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ email, fcmToken }));
 }
@@ -166,11 +171,14 @@ export async function signInWithEmail(emailInput: string, password: string) {
   const email = emailInput.trim().toLowerCase();
   const users = await readUsers();
   const matchingUser = users.find((candidate) => candidate.email === email);
-  const passwordHash = matchingUser
+  const passwordHash = matchingUser?.passwordSalt
     ? await hashPassword(password, matchingUser.passwordSalt)
     : "";
   const user = users.find(
-    (candidate) => candidate.email === email && candidate.passwordHash === passwordHash,
+    (candidate) =>
+      candidate.email === email &&
+      candidate.provider !== "google" &&
+      candidate.passwordHash === passwordHash,
   );
 
   if (!user) {
@@ -183,6 +191,31 @@ export async function signInWithEmail(emailInput: string, password: string) {
   );
 
   await writeUsers(updatedUsers);
+  await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ email, fcmToken }));
+}
+
+export async function signInWithGoogleProfile(input: {
+  email: string;
+  name: string;
+}) {
+  const email = input.email.trim().toLowerCase();
+  const name = input.name.trim();
+
+  if (!validateEmail(email) || !name) {
+    throw new Error("Google 계정 정보를 확인하세요.");
+  }
+
+  const users = await readUsers();
+  const fcmToken = await refreshFcmToken();
+  const existingUser = users.find((user) => user.email === email);
+  const nextUser: StoredUser = existingUser
+    ? { ...existingUser, name, provider: "google", fcmToken }
+    : { email, name, provider: "google", fcmToken };
+  const nextUsers = existingUser
+    ? users.map((user) => (user.email === email ? nextUser : user))
+    : [...users, nextUser];
+
+  await writeUsers(nextUsers);
   await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ email, fcmToken }));
 }
 

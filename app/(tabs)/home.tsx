@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -14,6 +15,7 @@ import {
   listMedicationSchedules,
   MedicationSchedule,
 } from "../../src/features/medicine/scheduleStore";
+import { getResponsiveLayout } from "../../src/styles/responsive";
 
 const COLORS = {
   background: "#f8f6f2",
@@ -39,6 +41,8 @@ const lowStockMedicines = [
 ];
 
 export default function HomeScreen() {
+  const { width } = useWindowDimensions();
+  const layout = getResponsiveLayout(width);
   const [savedSchedules, setSavedSchedules] = useState<MedicationSchedule[]>([]);
   const [takenIds, setTakenIds] = useState<(number | string)[]>(
     schedules.filter((item) => item.initialTaken).map((item) => item.id),
@@ -81,7 +85,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, layout.centered]} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <Text style={styles.greeting}>안녕하세요👋</Text>
           <Text style={styles.subtitle}>오늘도 건강한 하루 되세요</Text>

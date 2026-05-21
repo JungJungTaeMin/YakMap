@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -15,6 +16,7 @@ import {
   listMedicationSchedules,
   MedicationSchedule,
 } from "../../src/features/medicine/scheduleStore";
+import { getResponsiveLayout } from "../../src/styles/responsive";
 
 const COLORS = {
   background: "#f8f6f2",
@@ -67,6 +69,8 @@ const medicines = [
 ];
 
 export default function MedicinesScreen() {
+  const { width } = useWindowDimensions();
+  const layout = getResponsiveLayout(width);
   const [savedSchedules, setSavedSchedules] = useState<MedicationSchedule[]>([]);
 
   useFocusEffect(
@@ -105,7 +109,7 @@ export default function MedicinesScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, layout.content]} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>내 약 관리</Text>
