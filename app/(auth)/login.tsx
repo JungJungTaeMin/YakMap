@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,7 +13,7 @@ import {
 } from "react-native";
 
 import { signInWithEmail, validateEmail } from "../../src/features/auth/authStore";
-import { useGoogleAuth } from "../../src/features/auth/googleAuth";
+import { signInWithGoogle } from "../../src/features/auth/googleAuth";
 import { getResponsiveLayout } from "../../src/styles/responsive";
 
 const COLORS = {
@@ -29,7 +30,6 @@ const COLORS = {
 export default function LoginScreen() {
   const { width } = useWindowDimensions();
   const layout = getResponsiveLayout(width);
-  const { signInWithGoogle } = useGoogleAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [securePassword, setSecurePassword] = useState(true);
@@ -75,99 +75,101 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={[styles.hero, layout.authHero]}>
-        <Text style={styles.logo}>약-맵</Text>
-        <Text style={styles.tagline}>스마트한 복약 관리의 시작</Text>
-      </View>
-
-      <View style={[styles.card, layout.authCard]}>
-        <Text style={styles.title}>로그인</Text>
-
-        <Text style={styles.label}>이메일</Text>
-        <View style={styles.inputBox}>
-          <Mail color={COLORS.muted} size={24} strokeWidth={2.4} />
-          <TextInput
-            autoCapitalize="none"
-            keyboardType="email-address"
-            onChangeText={setEmail}
-            placeholder="example@email.com"
-            placeholderTextColor={COLORS.muted}
-            style={styles.input}
-            value={email}
-          />
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={[styles.hero, layout.authHero]}>
+          <Text style={styles.logo}>약-맵</Text>
+          <Text style={styles.tagline}>스마트한 복약 관리의 시작</Text>
         </View>
 
-        <Text style={styles.label}>비밀번호</Text>
-        <View style={styles.inputBox}>
-          <Lock color={COLORS.muted} size={24} strokeWidth={2.4} />
-          <TextInput
-            onChangeText={setPassword}
-            placeholder="••••••••"
-            placeholderTextColor={COLORS.muted}
-            secureTextEntry={securePassword}
-            style={styles.input}
-            value={password}
-          />
-          <Pressable
-            accessibilityLabel="비밀번호 보기 전환"
-            onPress={() => setSecurePassword((current) => !current)}
-            style={styles.iconButton}
-          >
-            <Eye color={COLORS.muted} size={25} strokeWidth={2.3} />
-          </Pressable>
-        </View>
+        <View style={[styles.card, layout.authCard]}>
+          <Text style={styles.title}>로그인</Text>
 
-        <Pressable style={styles.forgotButton}>
-          <Text style={styles.forgotText}>비밀번호를 잊으셨나요?</Text>
-        </Pressable>
+          <Text style={styles.label}>이메일</Text>
+          <View style={styles.inputBox}>
+            <Mail color={COLORS.muted} size={24} strokeWidth={2.4} />
+            <TextInput
+              autoCapitalize="none"
+              keyboardType="email-address"
+              onChangeText={setEmail}
+              placeholder="example@email.com"
+              placeholderTextColor={COLORS.muted}
+              style={styles.input}
+              value={email}
+            />
+          </View>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <Pressable
-          disabled={!canSubmit}
-          onPress={handleLogin}
-          style={[styles.loginButton, !canSubmit ? styles.disabledButton : null]}
-        >
-          <Text style={styles.loginButtonText}>
-            {isSubmitting ? "로그인 중" : "로그인"}
-          </Text>
-        </Pressable>
-
-        <View style={styles.dividerRow}>
-          <View style={styles.divider} />
-          <Text style={styles.dividerText}>또는</Text>
-          <View style={styles.divider} />
-        </View>
-
-        <Pressable style={styles.kakaoButton}>
-          <View style={styles.kakaoDot} />
-          <Text style={styles.kakaoText}>카카오로 계속하기</Text>
-        </Pressable>
-
-        <Pressable
-          disabled={isSubmitting || isGoogleSubmitting}
-          onPress={handleGoogleLogin}
-          style={[styles.googleButton, isGoogleSubmitting ? styles.googleButtonDisabled : null]}
-        >
-          <Text style={styles.googleMark}>G</Text>
-          <Text style={styles.googleText}>
-            {isGoogleSubmitting ? "Google 로그인 중" : "Google로 계속하기"}
-          </Text>
-        </Pressable>
-
-        <View style={styles.signupRow}>
-          <Text style={styles.signupMuted}>계정이 없으신가요?</Text>
-          <Link href="/signup" asChild>
-            <Pressable>
-              <Text style={styles.signupLink}>회원가입</Text>
+          <Text style={styles.label}>비밀번호</Text>
+          <View style={styles.inputBox}>
+            <Lock color={COLORS.muted} size={24} strokeWidth={2.4} />
+            <TextInput
+              onChangeText={setPassword}
+              placeholder="••••••••"
+              placeholderTextColor={COLORS.muted}
+              secureTextEntry={securePassword}
+              style={styles.input}
+              value={password}
+            />
+            <Pressable
+              accessibilityLabel="비밀번호 보기 전환"
+              onPress={() => setSecurePassword((current) => !current)}
+              style={styles.iconButton}
+            >
+              <Eye color={COLORS.muted} size={25} strokeWidth={2.3} />
             </Pressable>
-          </Link>
-        </View>
-      </View>
+          </View>
 
-      <Text style={styles.termsText}>
-        로그인하면 약-맵의 서비스 약관 및{"\n"}개인정보 처리방침에 동의하게 됩니다
-      </Text>
+          <Pressable style={styles.forgotButton}>
+            <Text style={styles.forgotText}>비밀번호를 잊으셨나요?</Text>
+          </Pressable>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          <Pressable
+            disabled={!canSubmit}
+            onPress={handleLogin}
+            style={[styles.loginButton, !canSubmit ? styles.disabledButton : null]}
+          >
+            <Text style={styles.loginButtonText}>
+              {isSubmitting ? "로그인 중" : "로그인"}
+            </Text>
+          </Pressable>
+
+          <View style={styles.dividerRow}>
+            <View style={styles.divider} />
+            <Text style={styles.dividerText}>또는</Text>
+            <View style={styles.divider} />
+          </View>
+
+          <Pressable style={styles.kakaoButton}>
+            <View style={styles.kakaoDot} />
+            <Text style={styles.kakaoText}>카카오로 계속하기</Text>
+          </Pressable>
+
+          <Pressable
+            disabled={isSubmitting || isGoogleSubmitting}
+            onPress={handleGoogleLogin}
+            style={[styles.googleButton, isGoogleSubmitting ? styles.googleButtonDisabled : null]}
+          >
+            <Text style={styles.googleMark}>G</Text>
+            <Text style={styles.googleText}>
+              {isGoogleSubmitting ? "Google 로그인 중" : "Google로 계속하기"}
+            </Text>
+          </Pressable>
+
+          <View style={styles.signupRow}>
+            <Text style={styles.signupMuted}>계정이 없으신가요?</Text>
+            <Link href="/signup" asChild>
+              <Pressable>
+                <Text style={styles.signupLink}>회원가입</Text>
+              </Pressable>
+            </Link>
+          </View>
+        </View>
+
+        <Text style={styles.termsText}>
+          로그인하면 약-맵의 서비스 약관 및{"\n"}개인정보 처리방침에 동의하게 됩니다
+        </Text>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -176,6 +178,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  scrollContent: {
+    paddingBottom: 34,
   },
   hero: {
     minHeight: 270,

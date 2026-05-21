@@ -17,7 +17,7 @@ import {
   validateEmail,
   validatePassword,
 } from "../../src/features/auth/authStore";
-import { useGoogleAuth } from "../../src/features/auth/googleAuth";
+import { signInWithGoogle } from "../../src/features/auth/googleAuth";
 import { getResponsiveLayout } from "../../src/styles/responsive";
 
 const COLORS = {
@@ -34,7 +34,6 @@ const COLORS = {
 export default function SignupScreen() {
   const { width } = useWindowDimensions();
   const layout = getResponsiveLayout(width);
-  const { signInWithGoogle } = useGoogleAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
