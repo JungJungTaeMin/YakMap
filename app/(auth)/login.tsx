@@ -13,7 +13,7 @@ import {
 } from "react-native";
 
 import { signInWithEmail, validateEmail } from "../../src/features/auth/authStore";
-import { signInWithGoogle } from "../../src/features/auth/googleAuth";
+import { useGoogleAuth } from "../../src/features/auth/googleAuth";
 import { getResponsiveLayout } from "../../src/styles/responsive";
 
 const COLORS = {
@@ -30,6 +30,7 @@ const COLORS = {
 export default function LoginScreen() {
   const { width } = useWindowDimensions();
   const layout = getResponsiveLayout(width);
+  const { signInWithGoogle } = useGoogleAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [securePassword, setSecurePassword] = useState(true);
