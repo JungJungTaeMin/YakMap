@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 
 export type MedicineCategory = "일반약" | "전문약";
 
@@ -38,6 +39,7 @@ export const frequentMedicines: Medicine[] = [
 
 const MEDICINE_CACHE_KEY = "medicine_cache";
 const MEDICINE_API_ENDPOINT = process.env.EXPO_PUBLIC_MEDICINE_API_ENDPOINT;
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
 
 type ExternalMedicineItem = Partial<{
   id: string;
@@ -69,6 +71,14 @@ function dedupeMedicines(medicines: Medicine[]) {
   return Array.from(
     new Map(medicines.map((medicine) => [medicine.id, medicine])).values(),
   );
+}
+
+function getApiUrl(path: string) {
+  if (!API_BASE_URL && Platform.OS !== "web") {
+    return null;
+  }
+
+  return `${API_BASE_URL}${path}`;
 }
 
 export function findMedicineById(id?: string) {
@@ -143,7 +153,26 @@ function getExternalMedicineItems(response: ExternalMedicineResponse) {
 export async function searchExternalMedicines(query: string) {
   const normalizedQuery = query.trim();
 
-  if (!normalizedQuery || !MEDICINE_API_ENDPOINT) {
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const serverApiUrl = getApiUrl(`/api/medicines?query=${encodeURIComponent(normalizedQuery)}`);
+
+  if (serverApiUrl) {
+    try {
+      const serverResponse = await fetch(serverApiUrl);
+
+      if (serverResponse.ok) {
+        const payload = (await serverResponse.json()) as { medicines?: Medicine[] };
+        return dedupeMedicines(payload.medicines ?? []);
+      }
+    } catch {
+      // Fall through to the direct API endpoint when the server API is unavailable.
+    }
+  }
+
+  if (!MEDICINE_API_ENDPOINT) {
     return [];
   }
 

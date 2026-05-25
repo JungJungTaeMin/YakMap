@@ -58,6 +58,7 @@ export function useGoogleAuth() {
 
     const profile = await fetchGoogleProfile(accessToken);
     await signInWithGoogleProfile({
+      accessToken,
       email: profile.email ?? "",
       name: profile.name ?? "Google 사용자",
     });

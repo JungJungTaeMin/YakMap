@@ -2,12 +2,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
+import { getSession } from "../auth/authStore";
 import { Medicine } from "./medicineCatalog";
 
 const SCHEDULES_KEY = "yak-map:medication-schedules";
 const NOTIFICATION_SETTINGS_KEY = "yak-map:medication-notifications-enabled";
 const MEDICATION_NOTIFICATION_CHANNEL_ID = "medication-reminders";
 const LOW_STOCK_THRESHOLD_DAYS = 3;
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -41,6 +43,113 @@ type SaveScheduleInput = {
   dose: number;
   times: string[];
 };
+
+function getApiUrl(path: string) {
+  if (!API_BASE_URL && Platform.OS !== "web") {
+    return null;
+  }
+
+  return `${API_BASE_URL}${path}`;
+}
+
+function normalizeStoredSchedule(schedule: MedicationSchedule) {
+  return {
+    ...schedule,
+    notificationIds: schedule.notificationIds ?? [],
+    lowStockAlertedAt: schedule.lowStockAlertedAt ?? null,
+  };
+}
+
+async function listLocalMedicationSchedules() {
+  const raw = await AsyncStorage.getItem(SCHEDULES_KEY);
+  return raw
+    ? (JSON.parse(raw) as MedicationSchedule[]).map(normalizeStoredSchedule)
+    : [];
+}
+
+async function getScheduleAuthContext() {
+  const session = await getSession();
+
+  if (!session) {
+    return null;
+  }
+
+  return session.serverAuthToken
+    ? {
+        serverAuthToken: session.serverAuthToken,
+        userEmail: session.email,
+      }
+    : null;
+}
+
+async function listServerMedicationSchedules() {
+  const apiUrl = getApiUrl("/api/schedules");
+  const authContext = await getScheduleAuthContext();
+
+  if (!apiUrl || !authContext) {
+    return null;
+  }
+
+  const url = `${apiUrl}?userEmail=${encodeURIComponent(authContext.userEmail)}`;
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${authContext.serverAuthToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = (await response.json()) as { schedules?: MedicationSchedule[] };
+  return (payload.schedules ?? []).map(normalizeStoredSchedule);
+}
+
+async function upsertServerMedicationSchedule(schedule: MedicationSchedule) {
+  const apiUrl = getApiUrl("/api/schedules");
+  const authContext = await getScheduleAuthContext();
+
+  if (!apiUrl || !authContext) {
+    return;
+  }
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${authContext.serverAuthToken}`,
+    "Content-Type": "application/json",
+  };
+
+  const response = await fetch(apiUrl, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ schedule, userEmail: authContext.userEmail }),
+  });
+
+  if (!response.ok) {
+    throw new Error("복약 일정 서버 저장에 실패했습니다.");
+  }
+}
+
+async function deleteServerMedicationSchedule(id: string) {
+  const apiUrl = getApiUrl("/api/schedules");
+  const authContext = await getScheduleAuthContext();
+
+  if (!apiUrl || !authContext) {
+    return;
+  }
+
+  const response = await fetch(apiUrl, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${authContext.serverAuthToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ id, userEmail: authContext.userEmail }),
+  });
+
+  if (!response.ok) {
+    throw new Error("복약 일정 서버 삭제에 실패했습니다.");
+  }
+}
 
 function addDays(dateText: string, days: number) {
   const [year, month, day] = dateText.split("-").map(Number);
@@ -207,8 +316,15 @@ async function presentLowStockAlert(schedule: MedicationSchedule) {
 }
 
 export async function listMedicationSchedules() {
-  const raw = await AsyncStorage.getItem(SCHEDULES_KEY);
-  return raw ? (JSON.parse(raw) as MedicationSchedule[]) : [];
+  const localSchedules = await listLocalMedicationSchedules();
+  const serverSchedules = await listServerMedicationSchedules().catch(() => null);
+
+  if (serverSchedules) {
+    await AsyncStorage.setItem(SCHEDULES_KEY, JSON.stringify(serverSchedules));
+    return serverSchedules;
+  }
+
+  return localSchedules;
 }
 
 export async function getMedicationNotificationsEnabled() {
@@ -231,6 +347,11 @@ export async function setMedicationNotificationsEnabled(enabled: boolean) {
     }));
 
     await AsyncStorage.setItem(SCHEDULES_KEY, JSON.stringify(nextSchedules));
+    await Promise.all(
+      nextSchedules.map((schedule) =>
+        upsertServerMedicationSchedule(schedule).catch(() => undefined),
+      ),
+    );
     return enabled;
   }
 
@@ -247,6 +368,11 @@ export async function setMedicationNotificationsEnabled(enabled: boolean) {
   );
 
   await AsyncStorage.setItem(SCHEDULES_KEY, JSON.stringify(nextSchedules));
+  await Promise.all(
+    nextSchedules.map((schedule) =>
+      upsertServerMedicationSchedule(schedule).catch(() => undefined),
+    ),
+  );
   return enabled;
 }
 
@@ -287,6 +413,7 @@ export async function saveMedicationSchedule(input: SaveScheduleInput) {
     : [schedule, ...schedules];
 
   await AsyncStorage.setItem(SCHEDULES_KEY, JSON.stringify(nextSchedules));
+  await upsertServerMedicationSchedule(schedule).catch(() => undefined);
   return schedule;
 }
 
@@ -297,6 +424,7 @@ export async function deleteMedicationSchedule(id: string) {
 
   const nextSchedules = schedules.filter((schedule) => schedule.id !== id);
   await AsyncStorage.setItem(SCHEDULES_KEY, JSON.stringify(nextSchedules));
+  await deleteServerMedicationSchedule(id).catch(() => undefined);
 }
 
 export async function updateMedicationRemainingPills(id: string, amount: number) {
@@ -330,6 +458,9 @@ export async function updateMedicationRemainingPills(id: string, amount: number)
   });
 
   await AsyncStorage.setItem(SCHEDULES_KEY, JSON.stringify(nextSchedules));
+  if (updatedSchedule) {
+    await upsertServerMedicationSchedule(updatedSchedule).catch(() => undefined);
+  }
 
   if (
     updatedSchedule &&
