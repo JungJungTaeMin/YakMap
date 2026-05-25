@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { ArrowLeft, Search } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   SafeAreaView,
@@ -14,7 +14,14 @@ import {
 
 import {
   frequentMedicines,
+  listCachedMedicines,
   medicineToParams,
+  mergeMedicines,
+  saveMedicinesToCache,
+  saveMedicineToCache,
+  searchExternalMedicines,
+  searchMedicineCache,
+  Medicine,
 } from "../../../src/features/medicine/medicineCatalog";
 import { getResponsiveLayout } from "../../../src/styles/responsive";
 
@@ -33,19 +40,101 @@ export default function SearchMedicineScreen() {
   const { width } = useWindowDimensions();
   const layout = getResponsiveLayout(width);
   const [query, setQuery] = useState("");
-  const filteredMedicines = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+  const [cachedMedicines, setCachedMedicines] = useState<Medicine[]>([]);
+  const [apiMedicines, setApiMedicines] = useState<Medicine[]>([]);
+  const [apiQuery, setApiQuery] = useState("");
+  const [isSearchingApi, setIsSearchingApi] = useState(false);
+
+  useEffect(() => {
+    listCachedMedicines()
+      .then(setCachedMedicines)
+      .catch(() => setCachedMedicines([]));
+  }, []);
+
+  useEffect(() => {
+    const normalizedQuery = query.trim();
+    const cachedMatches = searchMedicineCache(normalizedQuery, cachedMedicines);
 
     if (!normalizedQuery) {
-      return frequentMedicines;
+      setApiMedicines([]);
+      setApiQuery("");
+      setIsSearchingApi(false);
+      return undefined;
     }
 
-    return frequentMedicines.filter(
+    if (cachedMatches.length > 0) {
+      setApiQuery("");
+      setIsSearchingApi(false);
+      return undefined;
+    }
+
+    setApiMedicines([]);
+    setApiQuery(normalizedQuery);
+    setIsSearchingApi(true);
+    let isCurrentSearch = true;
+
+    const timeoutId = setTimeout(() => {
+      searchExternalMedicines(normalizedQuery)
+        .then(async (medicines) => {
+          if (!isCurrentSearch) {
+            return;
+          }
+
+          setApiMedicines(medicines);
+
+          if (medicines.length > 0) {
+            const nextCachedMedicines = await saveMedicinesToCache(medicines);
+            if (!isCurrentSearch) {
+              return;
+            }
+
+            setCachedMedicines(nextCachedMedicines);
+          }
+        })
+        .catch(() => {
+          if (isCurrentSearch) {
+            setApiMedicines([]);
+          }
+        })
+        .finally(() => {
+          if (isCurrentSearch) {
+            setIsSearchingApi(false);
+          }
+        });
+    }, 350);
+
+    return () => {
+      isCurrentSearch = false;
+      clearTimeout(timeoutId);
+    };
+  }, [cachedMedicines, query]);
+
+  const filteredMedicines = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const cachedMatches = searchMedicineCache(query, cachedMedicines);
+    const activeApiMedicines = apiQuery === query.trim() ? apiMedicines : [];
+
+    if (!normalizedQuery) {
+      return mergeMedicines(cachedMatches, frequentMedicines);
+    }
+
+    const catalogMatches = frequentMedicines.filter(
       (medicine) =>
         medicine.name.toLowerCase().includes(normalizedQuery) ||
         medicine.maker.toLowerCase().includes(normalizedQuery),
     );
-  }, [query]);
+
+    return mergeMedicines(cachedMatches, activeApiMedicines, catalogMatches);
+  }, [apiMedicines, apiQuery, cachedMedicines, query]);
+
+  const selectMedicine = async (medicine: Medicine) => {
+    const nextCachedMedicines = await saveMedicineToCache(medicine);
+    setCachedMedicines(nextCachedMedicines);
+    router.push({
+      pathname: "/medicine/add/schedule",
+      params: medicineToParams(medicine),
+    });
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -85,12 +174,7 @@ export default function SearchMedicineScreen() {
             return (
               <Pressable
                 key={medicine.id}
-                onPress={() =>
-                  router.push({
-                    pathname: "/medicine/add/schedule",
-                    params: medicineToParams(medicine),
-                  })
-                }
+                onPress={() => selectMedicine(medicine)}
                 style={styles.card}
               >
                   <View style={styles.medicineTextBox}>
@@ -109,7 +193,10 @@ export default function SearchMedicineScreen() {
               </Pressable>
             );
           })}
-          {filteredMedicines.length === 0 ? (
+          {isSearchingApi ? (
+            <Text style={styles.emptyText}>의약품 정보를 조회 중입니다</Text>
+          ) : null}
+          {!isSearchingApi && filteredMedicines.length === 0 ? (
             <Text style={styles.emptyText}>검색 결과가 없습니다</Text>
           ) : null}
         </View>

@@ -44,6 +44,7 @@ export default function SignupScreen() {
   const [serviceAgreed, setServiceAgreed] = useState(false);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
@@ -64,11 +65,13 @@ export default function SignupScreen() {
     }
 
     setError("");
+    setSuccessMessage("");
     setIsSubmitting(true);
 
     try {
       await signUpWithEmail({ email, name, password, passwordConfirm });
-      router.replace("/home");
+      setSuccessMessage("인증 메일을 발송했습니다.");
+      setTimeout(() => router.replace("/home"), 800);
     } catch (signupError) {
       setError(signupError instanceof Error ? signupError.message : "회원가입에 실패했습니다.");
     } finally {
@@ -78,6 +81,7 @@ export default function SignupScreen() {
 
   const handleGoogleSignup = async () => {
     setError("");
+    setSuccessMessage("");
     setIsGoogleSubmitting(true);
 
     try {
@@ -221,6 +225,7 @@ export default function SignupScreen() {
         </Pressable>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
 
         <View style={styles.dividerRow}>
           <View style={styles.divider} />
@@ -370,6 +375,13 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: 14,
     color: COLORS.coral,
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  successText: {
+    marginTop: 14,
+    color: COLORS.text,
     fontSize: 16,
     fontWeight: "700",
     textAlign: "center",

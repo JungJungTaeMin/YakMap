@@ -1,11 +1,13 @@
 import {
   Bell,
   ChevronRight,
+  LogOut,
   Moon,
   Shield,
   User,
 } from "lucide-react-native";
-import { useState } from "react";
+import { router } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   Pressable,
   SafeAreaView,
@@ -16,6 +18,11 @@ import {
   View,
 } from "react-native";
 
+import { signOut } from "../../src/features/auth/authStore";
+import {
+  getMedicationNotificationsEnabled,
+  setMedicationNotificationsEnabled,
+} from "../../src/features/medicine/scheduleStore";
 import { getResponsiveLayout } from "../../src/styles/responsive";
 
 const COLORS = {
@@ -33,6 +40,28 @@ export default function ProfileScreen() {
   const layout = getResponsiveLayout(width);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [darkModeEnabled, setDarkModeEnabled] = useState(false);
+
+  useEffect(() => {
+    getMedicationNotificationsEnabled()
+      .then(setNotificationsEnabled)
+      .catch(() => setNotificationsEnabled(true));
+  }, []);
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.replace("/login");
+  };
+
+  const toggleNotifications = async () => {
+    const nextEnabled = !notificationsEnabled;
+    setNotificationsEnabled(nextEnabled);
+
+    try {
+      await setMedicationNotificationsEnabled(nextEnabled);
+    } catch {
+      setNotificationsEnabled(!nextEnabled);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -81,7 +110,7 @@ export default function ProfileScreen() {
             <Text style={styles.menuText}>알림 설정</Text>
             <Pressable
               accessibilityLabel="알림 설정 전환"
-              onPress={() => setNotificationsEnabled((current) => !current)}
+              onPress={toggleNotifications}
               style={[
                 styles.switchTrack,
                 notificationsEnabled ? styles.switchTrackOn : null,
@@ -131,6 +160,11 @@ export default function ProfileScreen() {
             <ChevronRight color={COLORS.muted} size={30} strokeWidth={2.4} />
           </Pressable>
         </View>
+
+        <Pressable onPress={handleSignOut} style={styles.logoutButton}>
+          <LogOut color={COLORS.coral} size={30} strokeWidth={2.4} />
+          <Text style={styles.logoutText}>로그아웃</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -282,5 +316,23 @@ const styles = StyleSheet.create({
   },
   switchThumbOn: {
     alignSelf: "flex-end",
+  },
+  logoutButton: {
+    minHeight: 72,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    marginHorizontal: 24,
+    marginTop: 34,
+    borderWidth: 1.5,
+    borderColor: COLORS.coral,
+    borderRadius: 18,
+    backgroundColor: COLORS.white,
+  },
+  logoutText: {
+    color: COLORS.coral,
+    fontSize: 22,
+    fontWeight: "800",
   },
 });

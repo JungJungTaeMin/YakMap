@@ -30,6 +30,7 @@ export default function ScanMedicineScreen() {
   const { width } = useWindowDimensions();
   const layout = getResponsiveLayout(width);
   const [error, setError] = useState("");
+  const [candidateText, setCandidateText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleImage = async (uri?: string) => {
@@ -38,13 +39,22 @@ export default function ScanMedicineScreen() {
     }
 
     setError("");
+    setCandidateText("");
     setIsProcessing(true);
 
     try {
-      const medicine = await identifyMedicineFromImage(uri);
+      const result = await identifyMedicineFromImage(uri);
+      setCandidateText(
+        result.candidates.length > 0
+          ? `추출된 후보: ${result.candidates.map((candidate) => candidate.name).join(", ")}`
+          : `추출된 후보: ${result.medicine.name}`,
+      );
+      await new Promise((resolve) => {
+        setTimeout(resolve, 600);
+      });
       router.push({
         pathname: "/medicine/add/schedule",
-        params: medicineToParams(medicine),
+        params: medicineToParams(result.medicine),
       });
     } catch {
       setError("약 봉투 인식에 실패했습니다.");
@@ -136,6 +146,7 @@ export default function ScanMedicineScreen() {
         </Pressable>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {candidateText ? <Text style={styles.candidateText}>{candidateText}</Text> : null}
 
         <View style={styles.tipBox}>
           <View style={styles.tipHeader}>
@@ -283,6 +294,13 @@ const styles = StyleSheet.create({
     color: COLORS.coral,
     fontSize: 16,
     fontWeight: "700",
+    textAlign: "center",
+  },
+  candidateText: {
+    marginTop: 18,
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "800",
     textAlign: "center",
   },
   tipBox: {

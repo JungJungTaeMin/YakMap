@@ -6,6 +6,7 @@ import { Platform } from "react-native";
 
 const USERS_KEY = "yak-map:users";
 const SESSION_KEY = "yak-map:session";
+const EMAIL_VERIFICATION_KEY = "yak-map:email-verifications";
 
 export type AuthSession = {
   email: string;
@@ -18,7 +19,15 @@ type StoredUser = {
   passwordHash?: string;
   passwordSalt?: string;
   provider?: "email" | "google";
+  emailVerified?: boolean;
+  verificationEmailSentAt?: string;
   fcmToken: string | null;
+};
+
+type EmailVerification = {
+  email: string;
+  tokenHash: string;
+  sentAt: string;
 };
 
 type LegacyStoredUser = Partial<StoredUser> & {
@@ -46,6 +55,7 @@ async function readUsers() {
         return {
           ...user,
           provider: user.provider ?? "email",
+          emailVerified: user.provider === "google" ? true : user.emailVerified ?? false,
         } as StoredUser;
       }
 
@@ -59,6 +69,7 @@ async function readUsers() {
         passwordHash,
         passwordSalt,
         provider: "email" as const,
+        emailVerified: false,
         fcmToken: user.fcmToken ?? null,
       };
     }),
@@ -73,6 +84,15 @@ async function readUsers() {
 
 async function writeUsers(users: StoredUser[]) {
   await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+async function readEmailVerifications() {
+  const raw = await AsyncStorage.getItem(EMAIL_VERIFICATION_KEY);
+  return raw ? (JSON.parse(raw) as EmailVerification[]) : [];
+}
+
+async function writeEmailVerifications(verifications: EmailVerification[]) {
+  await AsyncStorage.setItem(EMAIL_VERIFICATION_KEY, JSON.stringify(verifications));
 }
 
 export function validateEmail(email: string) {
@@ -95,6 +115,45 @@ async function hashPassword(password: string, salt: string) {
     Crypto.CryptoDigestAlgorithm.SHA256,
     `${salt}:${password}`,
   );
+}
+
+async function createVerificationToken() {
+  const bytes = await Crypto.getRandomBytesAsync(24);
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function sendVerificationEmail(email: string) {
+  const token = await createVerificationToken();
+  const tokenHash = await hashPassword(token, email);
+  const sentAt = new Date().toISOString();
+  const verifications = await readEmailVerifications();
+  const nextVerifications = [
+    { email, tokenHash, sentAt },
+    ...verifications.filter((verification) => verification.email !== email),
+  ];
+
+  await writeEmailVerifications(nextVerifications);
+
+  const endpoint = process.env.EXPO_PUBLIC_EMAIL_VERIFICATION_ENDPOINT;
+  if (!endpoint) {
+    return sentAt;
+  }
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, token }),
+  });
+
+  if (!response.ok) {
+    throw new Error("인증 메일 발송에 실패했습니다.");
+  }
+
+  return sentAt;
 }
 
 export async function refreshFcmToken() {
@@ -155,16 +214,28 @@ export async function signUpWithEmail(input: {
 
   const users = await readUsers();
   if (users.some((user) => user.email === email)) {
-    throw new Error("이미 가입된 이메일입니다.");
+    throw new Error("이미 가입된 이메일입니다. 로그인해 주세요.");
   }
 
   const fcmToken = await refreshFcmToken();
   const passwordSalt = await createPasswordSalt();
   const passwordHash = await hashPassword(input.password, passwordSalt);
+  const verificationEmailSentAt = await sendVerificationEmail(email);
 
-  users.push({ email, name, passwordHash, passwordSalt, provider: "email", fcmToken });
+  users.push({
+    email,
+    name,
+    passwordHash,
+    passwordSalt,
+    provider: "email",
+    emailVerified: false,
+    verificationEmailSentAt,
+    fcmToken,
+  });
   await writeUsers(users);
   await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ email, fcmToken }));
+
+  return { verificationEmailSentAt };
 }
 
 export async function signInWithEmail(emailInput: string, password: string) {
@@ -209,8 +280,8 @@ export async function signInWithGoogleProfile(input: {
   const fcmToken = await refreshFcmToken();
   const existingUser = users.find((user) => user.email === email);
   const nextUser: StoredUser = existingUser
-    ? { ...existingUser, name, provider: "google", fcmToken }
-    : { email, name, provider: "google", fcmToken };
+    ? { ...existingUser, name, provider: "google", emailVerified: true, fcmToken }
+    : { email, name, provider: "google", emailVerified: true, fcmToken };
   const nextUsers = existingUser
     ? users.map((user) => (user.email === email ? nextUser : user))
     : [...users, nextUser];
@@ -222,4 +293,19 @@ export async function signInWithGoogleProfile(input: {
 export async function getSession() {
   const raw = await AsyncStorage.getItem(SESSION_KEY);
   return raw ? (JSON.parse(raw) as AuthSession) : null;
+}
+
+export async function signOut() {
+  const session = await getSession();
+
+  if (session) {
+    const users = await readUsers();
+    const nextUsers = users.map((user) =>
+      user.email === session.email ? { ...user, fcmToken: null } : user,
+    );
+
+    await writeUsers(nextUsers);
+  }
+
+  await AsyncStorage.removeItem(SESSION_KEY);
 }

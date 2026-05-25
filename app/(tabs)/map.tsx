@@ -5,7 +5,8 @@ import {
   Phone,
   Star,
 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import * as Location from "expo-location";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   SafeAreaView,
@@ -35,6 +36,10 @@ const COLORS = {
 };
 
 type Filter = "전체" | "약국" | "편의점";
+type Coordinates = {
+  latitude: number;
+  longitude: number;
+};
 
 const filters: Filter[] = ["전체", "약국", "편의점"];
 
@@ -47,7 +52,10 @@ const stores = [
     address: "서울시 강남구 테헤란로 123",
     hours: "09:00 - 19:00",
     phone: "02-1234-5678",
-    distance: "120m",
+    coordinates: {
+      latitude: 37.5013,
+      longitude: 127.0396,
+    },
     markerColor: COLORS.coral,
   },
   {
@@ -58,22 +66,131 @@ const stores = [
     address: "서울시 강남구 테헤란로 456",
     hours: "24시간",
     phone: "02-2345-6789",
-    distance: "250m",
+    coordinates: {
+      latitude: 37.5032,
+      longitude: 127.0432,
+    },
     markerColor: COLORS.mint,
   },
 ];
+
+const defaultLocation: Coordinates = {
+  latitude: 37.501,
+  longitude: 127.039,
+};
+
+function calculateDistanceMeters(from: Coordinates, to: Coordinates) {
+  const earthRadiusMeters = 6371000;
+  const toRadians = (degree: number) => (degree * Math.PI) / 180;
+  const deltaLatitude = toRadians(to.latitude - from.latitude);
+  const deltaLongitude = toRadians(to.longitude - from.longitude);
+  const fromLatitude = toRadians(from.latitude);
+  const toLatitude = toRadians(to.latitude);
+  const haversine =
+    Math.sin(deltaLatitude / 2) ** 2 +
+    Math.cos(fromLatitude) * Math.cos(toLatitude) * Math.sin(deltaLongitude / 2) ** 2;
+
+  return Math.round(
+    earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine)),
+  );
+}
+
+function formatDistance(distanceMeters: number) {
+  return distanceMeters >= 1000
+    ? `${(distanceMeters / 1000).toFixed(1)}km`
+    : `${distanceMeters}m`;
+}
+
+function parseTimeToMinutes(timeText: string) {
+  const [hours, minutes] = timeText.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function isStoreOpen(hoursText: string, now = new Date()) {
+  if (hoursText === "24시간") {
+    return true;
+  }
+
+  const [openText, closeText] = hoursText.split(" - ");
+  const openMinutes = parseTimeToMinutes(openText);
+  const closeMinutes = parseTimeToMinutes(closeText);
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  return currentMinutes >= openMinutes && currentMinutes < closeMinutes;
+}
 
 export default function MapScreen() {
   const { width } = useWindowDimensions();
   const layout = getResponsiveLayout(width);
   const [selectedFilter, setSelectedFilter] = useState<Filter>("전체");
+  const [currentLocation, setCurrentLocation] = useState<Coordinates | null>(null);
+  const [locationMessage, setLocationMessage] = useState("현재 위치를 확인 중입니다");
+  const [isLocationDenied, setIsLocationDenied] = useState(false);
+
+  const refreshCurrentLocation = useCallback(async () => {
+    const permission = await Location.requestForegroundPermissionsAsync();
+
+    if (!permission.granted) {
+      setCurrentLocation(null);
+      setIsLocationDenied(true);
+      setLocationMessage("위치 권한이 필요합니다");
+      return;
+    }
+
+    const location = await Location.getCurrentPositionAsync({});
+    setIsLocationDenied(false);
+    setCurrentLocation({
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+    });
+    setLocationMessage("현재 위치 기준 주변 구매처");
+  }, []);
+
+  useEffect(() => {
+    refreshCurrentLocation().catch(() => {
+      setCurrentLocation(null);
+      setLocationMessage("현재 위치를 확인하지 못했습니다");
+    });
+  }, [refreshCurrentLocation]);
+
+  const storesWithStatus = useMemo(
+    () => {
+      const baseLocation = currentLocation ?? defaultLocation;
+
+      return stores
+        .map((store) => {
+          const distanceMeters = calculateDistanceMeters(baseLocation, store.coordinates);
+          const isOpen = isStoreOpen(store.hours);
+
+          return {
+            ...store,
+            distance: formatDistance(distanceMeters),
+            distanceMeters,
+            isOpen,
+          };
+        })
+        .sort((left, right) => left.distanceMeters - right.distanceMeters);
+    },
+    [currentLocation],
+  );
+
+  const hasOpenPharmacy = storesWithStatus.some(
+    (store) => store.category === "약국" && store.isOpen,
+  );
 
   const visibleStores = useMemo(
-    () =>
-      selectedFilter === "전체"
-        ? stores
-        : stores.filter((store) => store.category === selectedFilter),
-    [selectedFilter],
+    () => {
+      if (selectedFilter === "약국") {
+        return storesWithStatus.filter(
+          (store) => store.category === selectedFilter && store.isOpen,
+        );
+      }
+
+      return selectedFilter === "전체"
+        ? storesWithStatus
+        : storesWithStatus.filter((store) => store.category === selectedFilter);
+    },
+    [selectedFilter, storesWithStatus],
   );
 
   const openDirections = (storeName: string) => {
@@ -85,6 +202,27 @@ export default function MapScreen() {
       <ScrollView contentContainerStyle={[styles.content, layout.content]} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>주변 구매처</Text>
         <Text style={styles.subtitle}>가까운 약국과 편의점을 찾아보세요</Text>
+        <Text style={styles.locationMessage}>{locationMessage}</Text>
+        {isLocationDenied ? (
+          <View style={styles.permissionCard}>
+            <Text style={styles.permissionTitle}>위치 권한 요청 안내</Text>
+            <Text style={styles.permissionText}>
+              현재 위치 기반 약국 조회를 위해 위치 권한을 허용해 주세요.
+            </Text>
+            <Pressable
+              onPress={() =>
+                refreshCurrentLocation().catch(() => {
+                  setCurrentLocation(null);
+                  setIsLocationDenied(true);
+                  setLocationMessage("현재 위치를 확인하지 못했습니다");
+                })
+              }
+              style={styles.permissionButton}
+            >
+              <Text style={styles.permissionButtonText}>위치 권한 다시 요청</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <View style={styles.mapBox}>
           <View style={[styles.marker, styles.markerPrimary]}>
@@ -100,7 +238,17 @@ export default function MapScreen() {
             <MapPin color={COLORS.white} fill={COLORS.white} size={27} strokeWidth={1.8} />
           </View>
 
-          <Pressable accessibilityLabel="현재 위치로 이동" style={styles.locateButton}>
+          <Pressable
+            accessibilityLabel="현재 위치로 이동"
+            onPress={() =>
+              refreshCurrentLocation().catch(() => {
+                setCurrentLocation(null);
+                setIsLocationDenied(true);
+                setLocationMessage("현재 위치를 확인하지 못했습니다");
+              })
+            }
+            style={styles.locateButton}
+          >
             <Navigation color={COLORS.text} size={34} strokeWidth={2.3} />
           </Pressable>
         </View>
@@ -123,14 +271,25 @@ export default function MapScreen() {
           })}
         </View>
 
+        {!hasOpenPharmacy ? (
+          <View style={styles.nightGuideCard}>
+            <Text style={styles.nightGuideTitle}>심야 대체 안내</Text>
+            <Text style={styles.nightGuideText}>
+              현재 영업 중인 약국이 부족합니다. 24시간 편의점의 안전상비의약품을 확인해 주세요.
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.storeList}>
           {visibleStores.map((store) => (
             <View key={store.id} style={styles.storeCard}>
               <View style={styles.storeHeader}>
                 <View style={styles.storeNameRow}>
                   <Text style={styles.storeName}>{store.name}</Text>
-                  <View style={styles.openBadge}>
-                    <Text style={styles.openBadgeText}>영업중</Text>
+                  <View style={[styles.openBadge, !store.isOpen ? styles.closedBadge : null]}>
+                    <Text style={styles.openBadgeText}>
+                      {store.isOpen ? "영업중" : "영업종료"}
+                    </Text>
                   </View>
                 </View>
                 <Text style={styles.distance}>{store.distance}</Text>
@@ -190,6 +349,45 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 23,
     fontWeight: "600",
+  },
+  locationMessage: {
+    marginTop: 14,
+    color: COLORS.coral,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  permissionCard: {
+    marginTop: 20,
+    padding: 20,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
+  },
+  permissionTitle: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  permissionText: {
+    marginTop: 12,
+    color: COLORS.muted,
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 26,
+  },
+  permissionButton: {
+    minHeight: 54,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 18,
+    borderRadius: 18,
+    backgroundColor: COLORS.coralPale,
+  },
+  permissionButtonText: {
+    color: COLORS.coral,
+    fontSize: 18,
+    fontWeight: "800",
   },
   mapBox: {
     minHeight: 260,
@@ -303,6 +501,26 @@ const styles = StyleSheet.create({
     gap: 20,
     marginTop: 34,
   },
+  nightGuideCard: {
+    marginTop: 24,
+    padding: 20,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    backgroundColor: COLORS.coralPale,
+  },
+  nightGuideTitle: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  nightGuideText: {
+    marginTop: 10,
+    color: COLORS.muted,
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 26,
+  },
   storeCard: {
     padding: 24,
     borderWidth: 1.5,
@@ -333,6 +551,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 15,
     backgroundColor: COLORS.mintPale,
+  },
+  closedBadge: {
+    backgroundColor: COLORS.beige,
   },
   openBadgeText: {
     color: COLORS.text,

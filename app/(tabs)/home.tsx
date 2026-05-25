@@ -1,6 +1,6 @@
 import { Calendar, Check, Circle, Clock, Pill, CircleAlert } from "lucide-react-native";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Pressable,
   SafeAreaView,
@@ -12,8 +12,11 @@ import {
 } from "react-native";
 
 import {
+  getLowStockMedicationSchedules,
+  isMedicationScheduleActiveToday,
   listMedicationSchedules,
   MedicationSchedule,
+  updateMedicationRemainingPills,
 } from "../../src/features/medicine/scheduleStore";
 import { getResponsiveLayout } from "../../src/styles/responsive";
 
@@ -35,11 +38,6 @@ const schedules = [
   { id: 3, name: "위장약", time: "19:00", dose: 1, category: "일반약", initialTaken: false },
 ];
 
-const lowStockMedicines = [
-  { id: 1, name: "오메가3", remaining: "6정", days: "2일" },
-  { id: 2, name: "비타민D", remaining: "15정", days: "5일" },
-];
-
 export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const layout = getResponsiveLayout(width);
@@ -47,6 +45,8 @@ export default function HomeScreen() {
   const [takenIds, setTakenIds] = useState<(number | string)[]>(
     schedules.filter((item) => item.initialTaken).map((item) => item.id),
   );
+  const [pendingTakenIds, setPendingTakenIds] = useState<(number | string)[]>([]);
+  const pendingTakenIdSetRef = useRef(new Set<number | string>());
 
   useFocusEffect(
     useCallback(() => {
@@ -58,29 +58,83 @@ export default function HomeScreen() {
 
   const displaySchedules = useMemo(
     () => [
-      ...savedSchedules.flatMap((schedule) =>
-        schedule.times.map((time, index) => ({
-          id: `${schedule.id}-${time}-${index}`,
-          name: schedule.medicine.name,
-          time,
-          dose: schedule.dose,
-          category: schedule.medicine.category,
-          initialTaken: false,
-        })),
-      ),
-      ...schedules,
+      ...savedSchedules
+        .filter((schedule) => isMedicationScheduleActiveToday(schedule))
+        .flatMap((schedule) =>
+          schedule.times.map((time, index) => ({
+            id: `${schedule.id}-${time}-${index}`,
+            name: schedule.medicine.name,
+            time,
+            dose: schedule.dose,
+            category: schedule.medicine.category,
+            initialTaken: false,
+            scheduleId: schedule.id,
+          })),
+        ),
+      ...schedules.map((schedule) => ({ ...schedule, scheduleId: null })),
     ],
     [savedSchedules],
   );
 
   const nextSchedule = displaySchedules.find((item) => !takenIds.includes(item.id));
+  const lowStockMedicines = useMemo(
+    () =>
+      getLowStockMedicationSchedules(savedSchedules).map((schedule) => ({
+        id: schedule.id,
+        name: schedule.medicine.name,
+        remaining: `${schedule.remainingPills}정`,
+        days: `${schedule.remainingDays}일`,
+      })),
+    [savedSchedules],
+  );
 
-  const toggleTaken = (id: number | string) => {
+  const toggleTaken = async (item: (typeof displaySchedules)[number]) => {
+    if (pendingTakenIdSetRef.current.has(item.id)) {
+      return;
+    }
+
+    const isAlreadyTaken = takenIds.includes(item.id);
+
     setTakenIds((current) =>
-      current.includes(id)
-        ? current.filter((currentId) => currentId !== id)
-        : [...current, id],
+      isAlreadyTaken
+        ? current.filter((currentId) => currentId !== item.id)
+        : [...current, item.id],
     );
+
+    if (!item.scheduleId) {
+      return;
+    }
+
+    pendingTakenIdSetRef.current.add(item.id);
+    setPendingTakenIds((current) => [...current, item.id]);
+
+    try {
+      const updatedSchedule = await updateMedicationRemainingPills(
+        item.scheduleId,
+        isAlreadyTaken ? item.dose : -item.dose,
+      );
+
+      if (!updatedSchedule) {
+        return;
+      }
+
+      setSavedSchedules((current) =>
+        current.map((schedule) =>
+          schedule.id === updatedSchedule.id ? updatedSchedule : schedule,
+        ),
+      );
+    } catch {
+      setTakenIds((current) =>
+        isAlreadyTaken
+          ? [...current, item.id]
+          : current.filter((currentId) => currentId !== item.id),
+      );
+    } finally {
+      pendingTakenIdSetRef.current.delete(item.id);
+      setPendingTakenIds((current) =>
+        current.filter((currentId) => currentId !== item.id),
+      );
+    }
   };
 
   return (
@@ -119,12 +173,18 @@ export default function HomeScreen() {
         <View style={styles.scheduleList}>
           {displaySchedules.map((item) => {
             const isTaken = takenIds.includes(item.id);
+            const isPending = pendingTakenIds.includes(item.id);
 
             return (
               <Pressable
+                disabled={isPending}
                 key={item.id}
-                onPress={() => toggleTaken(item.id)}
-                style={[styles.scheduleCard, isTaken ? styles.scheduleCardTaken : null]}
+                onPress={() => toggleTaken(item)}
+                style={[
+                  styles.scheduleCard,
+                  isTaken ? styles.scheduleCardTaken : null,
+                  isPending ? styles.scheduleCardPending : null,
+                ]}
               >
                 <View
                   style={[
@@ -162,19 +222,25 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.lowStockList}>
-          {lowStockMedicines.map((item) => (
-            <View key={item.id} style={styles.lowStockCard}>
-              <View>
-                <Text style={styles.lowStockName}>{item.name}</Text>
-                <Text style={styles.lowStockAmount}>남은 수량: {item.remaining}</Text>
-              </View>
+          {lowStockMedicines.length > 0 ? (
+            lowStockMedicines.map((item) => (
+              <View key={item.id} style={styles.lowStockCard}>
+                <View>
+                  <Text style={styles.lowStockName}>{item.name}</Text>
+                  <Text style={styles.lowStockAmount}>남은 수량: {item.remaining}</Text>
+                </View>
 
-              <View style={styles.lowStockDaysBox}>
-                <Text style={styles.lowStockLabel}>남은 일수</Text>
-                <Text style={styles.lowStockDays}>{item.days}</Text>
+                <View style={styles.lowStockDaysBox}>
+                  <Text style={styles.lowStockLabel}>남은 일수</Text>
+                  <Text style={styles.lowStockDays}>{item.days}</Text>
+                </View>
               </View>
+            ))
+          ) : (
+            <View style={styles.lowStockEmptyCard}>
+              <Text style={styles.lowStockEmptyText}>부족한 약이 없습니다</Text>
             </View>
-          ))}
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -297,6 +363,9 @@ const styles = StyleSheet.create({
   scheduleCardTaken: {
     borderColor: "#d5f1ec",
   },
+  scheduleCardPending: {
+    opacity: 0.65,
+  },
   scheduleIcon: {
     width: 70,
     height: 70,
@@ -363,6 +432,21 @@ const styles = StyleSheet.create({
     borderColor: "#ffc9c4",
     borderRadius: 18,
     backgroundColor: COLORS.coralPale,
+  },
+  lowStockEmptyCard: {
+    minHeight: 92,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    backgroundColor: COLORS.white,
+  },
+  lowStockEmptyText: {
+    color: COLORS.muted,
+    fontSize: 20,
+    fontWeight: "800",
   },
   lowStockName: {
     color: COLORS.text,

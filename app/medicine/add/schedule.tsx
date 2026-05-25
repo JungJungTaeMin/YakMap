@@ -12,7 +12,11 @@ import {
   View,
 } from "react-native";
 
-import { findMedicineById } from "../../../src/features/medicine/medicineCatalog";
+import {
+  findMedicineById,
+  Medicine,
+  MedicineCategory,
+} from "../../../src/features/medicine/medicineCatalog";
 import {
   getMedicationSchedule,
   saveMedicationSchedule,
@@ -64,14 +68,34 @@ function isValidDurationText(value: string) {
   return /^\d+$/.test(value.trim()) && Number.isSafeInteger(duration) && duration > 0;
 }
 
+function getParamValue(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export default function MedicineScheduleScreen() {
   const { width } = useWindowDimensions();
   const layout = getResponsiveLayout(width);
-  const params = useLocalSearchParams<{ medicineId?: string; scheduleId?: string }>();
-  const scheduleId = Array.isArray(params.scheduleId) ? params.scheduleId[0] : params.scheduleId;
-  const medicine = findMedicineById(
-    Array.isArray(params.medicineId) ? params.medicineId[0] : params.medicineId,
-  );
+  const params = useLocalSearchParams<{
+    category?: MedicineCategory;
+    maker?: string;
+    medicineId?: string;
+    medicineName?: string;
+    scheduleId?: string;
+  }>();
+  const scheduleId = getParamValue(params.scheduleId);
+  const medicineId = getParamValue(params.medicineId);
+  const medicineName = getParamValue(params.medicineName);
+  const maker = getParamValue(params.maker);
+  const category = getParamValue(params.category);
+  const medicine: Medicine =
+    medicineId && medicineName && maker && category
+      ? {
+          id: medicineId,
+          name: medicineName,
+          maker,
+          category,
+        }
+      : findMedicineById(medicineId);
   const [startDate, setStartDate] = useState("");
   const [durationDays, setDurationDays] = useState("7");
   const [frequency, setFrequency] = useState(3);

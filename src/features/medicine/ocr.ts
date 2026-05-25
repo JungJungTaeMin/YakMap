@@ -1,6 +1,9 @@
 import * as FileSystem from "expo-file-system";
 
-import { matchMedicineFromText } from "./medicineCatalog";
+import {
+  findMedicineCandidatesFromText,
+  matchMedicineFromText,
+} from "./medicineCatalog";
 
 type VisionTextResponse = {
   medicineName?: string;
@@ -17,7 +20,7 @@ async function requestVisionText(base64Image: string) {
   const endpoint = process.env.EXPO_PUBLIC_OCR_ENDPOINT;
 
   if (!endpoint) {
-    throw new Error("OCR endpoint is not configured.");
+    return process.env.EXPO_PUBLIC_OCR_MOCK_TEXT ?? "";
   }
 
   const response = await fetch(endpoint, {
@@ -38,12 +41,18 @@ async function requestVisionText(base64Image: string) {
 
 export async function identifyMedicineFromImage(uri: string) {
   const base64Image = await readImageAsBase64(uri);
-  const text = await requestVisionText(base64Image);
+  const fileNameText = decodeURIComponent(uri.split("/").pop() ?? "");
+  const text = `${await requestVisionText(base64Image)} ${fileNameText}`;
   const medicine = matchMedicineFromText(text);
+  const candidates = findMedicineCandidatesFromText(text);
 
   if (!medicine) {
     throw new Error("Medicine was not matched.");
   }
 
-  return medicine;
+  return {
+    candidates,
+    medicine,
+    text,
+  };
 }
