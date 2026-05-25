@@ -18,6 +18,12 @@ export type AuthSession = {
   syncToken: string;
 };
 
+export type AuthProfile = {
+  email: string;
+  name: string;
+  provider?: "email" | "google";
+};
+
 type StoredUser = {
   email: string;
   name: string;
@@ -507,6 +513,23 @@ export async function getSession() {
   await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
 
   return nextSession;
+}
+
+export async function getCurrentUserProfile(): Promise<AuthProfile | null> {
+  const session = await getSession();
+
+  if (!session) {
+    return null;
+  }
+
+  const users = await readUsers();
+  const user = users.find((candidate) => candidate.email === session.email);
+
+  return {
+    email: session.email,
+    name: user?.name?.trim() || session.email.split("@")[0],
+    provider: user?.provider,
+  };
 }
 
 export async function signOut() {

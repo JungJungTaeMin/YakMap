@@ -18,9 +18,14 @@ import {
   View,
 } from "react-native";
 
-import { signOut } from "../../src/features/auth/authStore";
+import {
+  AuthProfile,
+  getCurrentUserProfile,
+  signOut,
+} from "../../src/features/auth/authStore";
 import {
   getMedicationNotificationsEnabled,
+  listMedicationSchedules,
   setMedicationNotificationsEnabled,
 } from "../../src/features/medicine/scheduleStore";
 import { getResponsiveLayout } from "../../src/styles/responsive";
@@ -40,11 +45,28 @@ export default function ProfileScreen() {
   const layout = getResponsiveLayout(width);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [darkModeEnabled, setDarkModeEnabled] = useState(false);
+  const [profile, setProfile] = useState<AuthProfile | null>(null);
+  const [medicineCount, setMedicineCount] = useState(0);
 
   useEffect(() => {
     getMedicationNotificationsEnabled()
       .then(setNotificationsEnabled)
       .catch(() => setNotificationsEnabled(true));
+
+    getCurrentUserProfile()
+      .then((currentProfile) => {
+        if (!currentProfile) {
+          router.replace("/login");
+          return;
+        }
+
+        setProfile(currentProfile);
+      })
+      .catch(() => router.replace("/login"));
+
+    listMedicationSchedules()
+      .then((schedules) => setMedicineCount(schedules.length))
+      .catch(() => setMedicineCount(0));
   }, []);
 
   const handleSignOut = async () => {
@@ -70,13 +92,13 @@ export default function ProfileScreen() {
           <View style={styles.avatar}>
             <User color={COLORS.coral} size={72} strokeWidth={2.2} />
           </View>
-          <Text style={styles.name}>김건강</Text>
-          <Text style={styles.email}>keongang@example.com</Text>
+          <Text style={styles.name}>{profile?.name ?? "사용자"}</Text>
+          <Text style={styles.email}>{profile?.email ?? ""}</Text>
         </View>
 
         <View style={styles.statsCard}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumberCoral}>3</Text>
+            <Text style={styles.statNumberCoral}>{medicineCount}</Text>
             <Text style={styles.statLabel}>등록된 약</Text>
           </View>
           <View style={styles.statDivider} />
